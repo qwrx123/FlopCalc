@@ -1,0 +1,252 @@
+.nolist
+    #include    "ti83plus.inc"
+.list
+.org    $9D93
+.db    t2ByteTok, tAsmCmp
+	ld hl, 0
+	ld (curCol), hl
+	ld (curRow), hl
+	DI
+	LD D, 255
+	LD E, 255
+	ld ixh, 255
+	ld ixl, 255
+	LD DE, %0010011001000011
+	LD HL, %0001011100100111
+	LD B, %01010001
+	LD C, %01001001
+   ld a,$47      ;8 hz
+   out ($36),a
+   ld a,0        ; no loop, no interrupt
+   out ($37),a
+   ld a,255      ;16 ticks / 8 hz equals 2 seconds
+   out ($38),a
+	JR innerloop
+outerloop:
+	ld ixh, 255
+innerloop:
+	call hlxrnd
+	call dexrnd
+	Call Float24Add
+	call hlxrnd
+	call dexrnd
+	Call Float24Sub
+	dec ixh
+	JR NZ, innerloop
+	DEC ixl
+	JR NZ, outerloop
+	IN A, ($38)
+	EI
+	ld hl, 0
+	ld l, a
+	bcall(_dispHL)
+	ld ixh, 255
+	ld ixl, 255
+	LD DE, %0010011001000011
+	LD HL, %0001011100100111
+	LD B, %01010001
+	LD C, %01001001
+	ld a,$47      ;8 hz
+	out ($36),a
+	ld a,0        ; no loop, no interrupt
+	out ($37),a
+	ld a,255      ;16 ticks / 8 hz equals 2 seconds
+	out ($38),a
+secondtime:
+	JR innerloop2
+outerloop2:
+	ld ixh, 255
+innerloop2:
+	call hlxrnd2
+	call dexrnd2
+	call hlxrnd2
+	call dexrnd2
+	dec ixh
+	JR NZ, innerloop2
+	DEC ixl
+	JR NZ, outerloop2
+	IN A, ($38)
+	ld hl, 1
+	ld (curRow), hl
+	ld hl,0
+	ld (curCol), hl
+	ld l, a
+	bcall(_dispHL)
+	EI
+    xor a
+    out ($36),a   ;Turn off the timer.
+    out ($37),a
+	RET
+Float24Add: ;http://z80-heaven.wikidot.com/floating-point#toc4
+;BHL+CDE
+    ld a,c
+    xor 40h
+    ld c,a
+    rlc c
+    ld a,b
+    rla
+    rlc b
+    xor 80h
+    sub c
+    jr z,f24shifted
+    jr nc,f24shiftDE
+    rra
+    cp -16
+    jr nc,$+6
+    ld a,c \ ex de,hl \ rrca \ ret
+    srl h \ rr l
+    inc a \ jr nz,$-5
+    jr nc,$+3 \ inc hl
+    ld a,b \ and 1 \ ld b,a \ ld a,c \ and $FE \ xor 80h \ or b \ jp f24shifted+1
+f24ShiftDE:
+    rra
+    cp 16
+    jr c,$+5
+    ld a,b \ rrca \ ret
+    srl d \ rr e
+    dec a \ jr nz,$-5
+    jr nc,$+3 \ inc de
+    ld a,c \ and 1 \ ld c,a \ ld a,b \ and $FE \ or c \ ld c,a
+f24Shifted:
+    ld a,b \ rrca \ ld b,a \ ld a,c \ rrca \ ld c,a \ xor b \ ld a,b \ jp m,f24sub
+    add hl,de \ ret nc
+    ld c,0 \ inc c \ inc c \ rr h \ rr l \ jr nc,$+8 \ inc l \ jr nz,$+5 \ inc h
+    jr z,$-12
+    rlca \ add a,c \ jp p,$+10
+    jr c,$+7 \ bit 6,b \ rrca \ jr z,$+4
+    rrca \ ret
+SetInf:
+    ld hl,$FFFF
+    rla
+    ld a,h
+    rra
+    ld b,a
+    ret
+f24Sub:
+    sbc hl,de
+    jr nc,normalise24
+    xor 80h
+    ld b,a
+    xor a \ sub l \ ld l,a
+    sbc a,a \ sub h \ ld h,a
+    ld a,b
+normalise24:
+    bit 7,h \ ret nz
+    ld a,b \ add a,a
+    cp $82 \ ret z
+    dec a \ dec a
+    add hl,hl
+    rlc b \ rra \ ld b,a
+    jp normalise24
+Float24Sub:
+;BHL-CDE
+    ld a,80h
+    xor c
+    ld c,a
+    jp Float24Add
+f24_exp2:
+    .db 0
+f24_exp1:
+    .db 0
+f24_exp4:
+    .db 0
+f24_exp3:
+    .db 0
+f24_exp6:
+    .db 0
+f24_exp5:
+    .db 0
+f24_man1:
+    .dw 0
+f24_man2:
+    .dw 0
+f24_man3:
+    .dw 0
+f24_man4:
+    .dw 0
+f24_man5:
+    .dw 0
+f24_man6:
+    .dw 0
+tempbyte1:
+    .db 0
+tempword1:
+    .dw 0
+clock1:
+	.DB 0
+clock2:
+	.DB 0
+hlxrnd: ;http://www.retroprogramming.com/2017/07/xorshift-pseudorandom-numbers-in-z80.html
+	ld hl,%0010011001000011       ; seed must not be 0
+	ld a,h
+	rra
+	ld a,l
+	rra
+	xor h
+	ld h,a
+	ld a,l
+	rra
+	ld a,h
+	rra
+	xor l
+	ld l,a
+	xor h
+	ld h,a
+	ld (hlxrnd+1),hl
+	ret
+dexrnd:
+	ld DE,%0001011100100111       ; seed must not be 0
+	ld a,D
+	rra
+	ld a,E
+	rra
+	xor D
+	ld D,a
+	ld a,E
+	rra
+	ld a,D
+	rra
+	xor E
+	ld E,a
+	xor D
+	ld D,a
+	ld (dexrnd+1),DE
+	ret
+hlxrnd2:
+	ld hl,%0010011001000011       ; seed must not be 0
+	ld a,h
+	rra
+	ld a,l
+	rra
+	xor h
+	ld h,a
+	ld a,l
+	rra
+	ld a,h
+	rra
+	xor l
+	ld l,a
+	xor h
+	ld h,a
+	ld (hlxrnd2+1),hl
+	ret
+dexrnd2:
+	ld DE,%0001011100100111       ; seed must not be 0
+	ld a,D
+	rra
+	ld a,E
+	rra
+	xor D
+	ld D,a
+	ld a,E
+	rra
+	ld a,D
+	rra
+	xor E
+	ld E,a
+	xor D
+	ld D,a
+	ld (dexrnd2+1),DE
+	ret
+.end
+.end
