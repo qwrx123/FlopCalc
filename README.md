@@ -17,4 +17,4 @@ time2 = (255-(secondnumbergenerated))/8
 
 floptime = time1 - time2
 
-flops=(2*255*255)/floptime
+flops=(2 * 255 * 255)/floptime
